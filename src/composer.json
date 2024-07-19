@@ -1,0 +1,27 @@
+{
+    "name": "masmaleki/laravel-nexar-graphql",
+    "description": "A Laravel package to interact with Nexar API using GraphQL",
+    "type": "library",
+    "require": {
+        "php": "^8.0|^8.1|^8.2",
+        "guzzlehttp/guzzle": "^7.0",
+        "illuminate/support": "^9.0|^10.0|^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "NexarGraphQL\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "NexarGraphQL\\Providers\\NexarGraphQLServiceProvider"
+            ],
+            "aliases": {
+                "NexarGraphQL": "NexarGraphQL\\Facades\\NexarGraphQL"
+            }
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
