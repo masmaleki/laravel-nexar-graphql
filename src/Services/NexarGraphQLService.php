@@ -49,11 +49,12 @@ class NexarGraphQLService
             ],
             'json' => [
                 'query' => $query,
-                'variables' => $variables
+                'variables' => (object) $variables  // Ensure variables are an object
             ]
         ]);
 
-        return json_decode($response->getBody()->getContents(), true);
+        $body = $response->getBody()->getContents();
+        return json_decode($body, true);
     }
 
     public function listAttributes()
@@ -425,7 +426,7 @@ query FilterByManufacturer (\$searchTerm: String!, \$limit: Int, \$filters: Map)
     }
 }
 GQL;
-        $variables = ['searchTerm' => $searchTerm, 'limit' => $limit, 'filters' => $filters];
+        $variables = ['searchTerm' => $searchTerm, 'limit' => $limit, 'filters' => (object) $filters];
         return $this->query($query, $variables);
     }
 
@@ -454,7 +455,7 @@ query FilterByDistributor (\$searchTerm: String!, \$limit: Int, \$filters: Map) 
     }
 }
 GQL;
-        $variables = ['searchTerm' => $searchTerm, 'limit' => $limit, 'filters' => $filters];
+        $variables = ['searchTerm' => $searchTerm, 'limit' => $limit, 'filters' => (object) $filters];
         return $this->query($query, $variables);
     }
 
@@ -482,7 +483,7 @@ query FilterByPartCategory (\$searchTerm: String!, \$limit: Int, \$filters: Map)
     }
 }
 GQL;
-        $variables = ['searchTerm' => $searchTerm, 'limit' => $limit, 'filters' => $filters];
+        $variables = ['searchTerm' => $searchTerm, 'limit' => $limit, 'filters' => (object) $filters];
         return $this->query($query, $variables);
     }
 
@@ -509,7 +510,7 @@ query FilterByTechSpec (\$searchTerm: String!, \$limit: Int, \$filters: Map) {
     }
 }
 GQL;
-        $variables = ['searchTerm' => $searchTerm, 'limit' => $limit, 'filters' => $filters];
+        $variables = ['searchTerm' => $searchTerm, 'limit' => $limit, 'filters' => (object) $filters];
         return $this->query($query, $variables);
     }
 
@@ -745,7 +746,7 @@ GQL;
             'searchTerm' => $searchTerm,
             'country' => $country,
             'currency' => $currency,
-            'filters' => $filters,
+            'filters' => (object) $filters,
             'inStockOnly' => $inStockOnly,
             'limit' => $limit,
             'start' => $start
@@ -827,7 +828,7 @@ GQL;
             'country' => $country,
             'currency' => $currency,
             'requireStockAvailable' => $requireStockAvailable,
-            'filters' => $filters,
+            'filters' => (object) $filters,
             'queries' => $queries
         ];
         return $this->query($query, $variables);
