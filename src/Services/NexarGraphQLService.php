@@ -833,4 +833,99 @@ GQL;
         ];
         return $this->query($query, $variables);
     }
+
+
+    public function alternatives($mpn, $limit)
+    {
+        $query = <<<GQL
+
+        #Returns the total availability of a component on the market in a specified country
+        query totalAvailability {
+          supSearchMpn(
+            #The value can be a partial match - the MPN of the parts returned all contain "acs770"
+            #Change the value "acs770" to return a part of your own
+            q: "\$mpn",    
+            #Total availability defaults to US. Set your ISO country code below
+            country: "US",
+            limit: \$limit
+            ){
+            results {
+              description
+              part {
+              #For this query, we return the part total availability & full MPN
+                #Press CTRL+space to find out what else you can return
+                totalAvail
+                mpn
+                akaMpns
+                genericMpn
+                shortDescription
+                descriptions{
+                  text
+                  creditString
+                  creditUrl
+                }
+                manufacturer{
+                  id
+                  name
+                  aliases
+                  homepageUrl
+                  slug
+                  isVerified
+                  isDistributorApi
+                  isOctocartSupported
+                }
+                sellers{
+                  company{
+                    name
+                    aliases
+                    id
+                    isVerified
+                  }
+                  offers{
+                    id
+                    sku
+                    eligibleRegion
+                    packaging
+                    moq
+                    prices{
+                      quantity
+                      price
+                      currency
+                      convertedPrice
+                      conversionRate
+                      convertedCurrency
+                    }
+                    updated
+                    clickUrl
+                    onOrderQuantity
+                    isCustomPricing
+                    factoryPackQuantity
+                    multipackQuantity
+                  }
+                  isBroker
+                }
+                descriptions{
+                  text
+                  creditString
+                  creditUrl
+                }
+                medianPrice1000{
+                  quantity
+                  price
+                  currency
+                  convertedPrice
+                  convertedCurrency
+                  conversionRate
+                }
+              }
+            }
+          }
+        }
+GQL;
+        $variables = [
+            'mpn' => $mpn,
+            'limit' => $limit,
+        ];
+        return $this->query($query, $variables);
+    }
 }
