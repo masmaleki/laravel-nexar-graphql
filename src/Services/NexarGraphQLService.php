@@ -40,7 +40,7 @@ class NexarGraphQLService
         return $token;
     }
 
-    protected function getSupplyToken()
+    public function getSupplyToken()
     {
         return $this->token;
     }
