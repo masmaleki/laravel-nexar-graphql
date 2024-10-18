@@ -40,6 +40,11 @@ class NexarGraphQLService
         return $token;
     }
 
+    protected function getSupplyToken()
+    {
+        return $this->token;
+    }
+
     protected function query($query, $variables = [])
     {
         $response = $this->client->post(config('nexar.endpoint'), [
