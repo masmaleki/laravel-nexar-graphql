@@ -835,58 +835,47 @@ GQL;
     }
 
 
-    public function alternatives($mpn, $limit)
+    public function availabilities($mpn, $filters, $limit)
     {
         $query = <<<GQL
 
         #Returns the total availability of a component on the market in a specified country
-        query totalAvailability {
+        query totalAvailability (\$mpn: String!, \$limit: Int!, \$filters: Map) { 
           supSearchMpn(
             #The value can be a partial match - the MPN of the parts returned all contain "acs770"
             #Change the value "acs770" to return a part of your own
-            q: "\$mpn",    
+            q: \$mpn,    
             #Total availability defaults to US. Set your ISO country code below
-            country: "US",
+            filters: \$filters,
             limit: \$limit
+            currency: "USD"
             ){
             results {
               description
               part {
               #For this query, we return the part total availability & full MPN
                 #Press CTRL+space to find out what else you can return
-                totalAvail
                 mpn
-                akaMpns
-                genericMpn
                 shortDescription
-                descriptions{
-                  text
-                  creditString
-                  creditUrl
-                }
                 manufacturer{
                   id
                   name
-                  aliases
-                  homepageUrl
-                  slug
-                  isVerified
-                  isDistributorApi
-                  isOctocartSupported
                 }
-                sellers{
+                sellers (
+                    authorizedOnly:true
+                    includeBrokers:false
+                ){
                   company{
                     name
-                    aliases
-                    id
                     isVerified
                   }
                   offers{
                     id
                     sku
-                    eligibleRegion
                     packaging
                     moq
+                    inventoryLevel
+                    updated
                     prices{
                       quantity
                       price
@@ -895,27 +884,7 @@ GQL;
                       conversionRate
                       convertedCurrency
                     }
-                    updated
-                    clickUrl
-                    onOrderQuantity
-                    isCustomPricing
-                    factoryPackQuantity
-                    multipackQuantity
                   }
-                  isBroker
-                }
-                descriptions{
-                  text
-                  creditString
-                  creditUrl
-                }
-                medianPrice1000{
-                  quantity
-                  price
-                  currency
-                  convertedPrice
-                  convertedCurrency
-                  conversionRate
                 }
               }
             }
@@ -925,6 +894,7 @@ GQL;
         $variables = [
             'mpn' => $mpn,
             'limit' => $limit,
+            'filters' => (object) $filters
         ];
         return $this->query($query, $variables);
     }
