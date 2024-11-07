@@ -4,6 +4,7 @@ namespace NexarGraphQL\Services;
 
 use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Cache;
+use NexarGraphQL\App\Models\NexarToken;
 
 class NexarGraphQLService
 {
@@ -18,10 +19,22 @@ class NexarGraphQLService
 
     protected function getToken()
     {
-        if (Cache::has('nexar_token')) {
-            return Cache::get('nexar_token');
-        }
+        // $token = NexarToken::first();
+        // if ($token) {
+        //     return $token->token;
+        // }
+        //Cache::forget('nexar_token');
 
+        if (Cache::has('nexar_token')) {
+            $tokenData = Cache::get('nexar_token');
+            $ttl = now()->diffInSeconds($tokenData['expires_at'], false); // Calculate time left in seconds
+            // dd([
+            //     'token' => $tokenData['token'],
+            //     'ttl' => $ttl > 0 ? $ttl : 'Expired',
+            // ]);
+            return $tokenData['token'];
+        }
+        //dd("nocache");
         $response = $this->client->post(config('nexar.identity_endpoint'), [
             'form_params' => [
                 'grant_type' => 'client_credentials',
@@ -34,8 +47,26 @@ class NexarGraphQLService
         $data = json_decode($response->getBody()->getContents(), true);
         $token = $data['access_token'];
         $expiresIn = $data['expires_in'];
+        $expiresAt = now()->addSeconds($expiresIn);
+            // Store the token with expiration time
+           $nexar_token = NexarToken::create([
+                'client_id' => config('nexar.client_id'),
+                'client_secret' => config('nexar.client_secret'),
+                'supply_token' => $token,
+                'expires_at' => $expiresAt,
+                'expires_in' => $expiresIn,
+                'scope' =>'supply.domain',
+            ]);
 
-        Cache::put('nexar_token', $token, $expiresIn / 60);
+            
+            Cache::put('nexar_token', [
+                'token' => $token,
+                'expires_at' => $expiresAt,
+                'id' => $nexar_token->id
+            ], $expiresIn);
+
+            //dd(Cache::get('nexar_token')); // View cached data
+       
 
         return $token;
     }
