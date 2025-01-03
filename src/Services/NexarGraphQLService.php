@@ -558,14 +558,80 @@ query PartSpecs (\$searchTerm: String!, \$limit: Int) {
         hits
         results {
             part {
+                freeSampleUrl
+                category {
+                    id
+                    parentId
+                    name
+                    ancestors {
+                        id
+                        parentId
+                        name
+                        numParts
+                        blurb {
+                            name
+                            description
+                            content
+                            metaTitle
+                            pathName
+                            metaDescription
+                        }
+                        path
+                    }
+                    children {
+                        id
+                        parentId
+                        name
+                        numParts
+                        blurb {
+                            name
+                            description
+                            content
+                            metaTitle
+                            pathName
+                            metaDescription
+                        }
+                        path
+                    }
+                    numParts
+                    blurb {
+                        name
+                        description
+                        content
+                        metaTitle
+                        pathName
+                        metaDescription
+                    }
+                    path
+                }
+
+                akaMpns
                 id
                 name
                 mpn
+                manufacturer {
+                    aliases
+                    name
+                    id
+                }
                 specs {
                     attribute {
+                        #For this query, we have chosen to return the part specification name, id & shortname
+                        #Press CTRL+space to find out what else you can return
                         name
+                        id
                         shortname
+                        
+                        unitsName
+                        valueType
+                        group
                     }
+                    value
+                    siValue
+                    units
+                    unitsName
+                    unitsSymbol
+                    
                     displayValue
                 }
             }
