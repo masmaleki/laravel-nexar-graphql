@@ -10,9 +10,12 @@ class NexarGraphQLService
 {
     protected $client;
     protected $token;
+    protected $organizationId;
 
     public function __construct()
     {
+        $this->organizationId = config('nexar.current_internal_organization_id');;
+        //info('__construct      ' . $this->organizationId);
         $this->client = new Client();
         $this->token = $this->getToken();
     }
@@ -24,9 +27,10 @@ class NexarGraphQLService
         //     return $token->token;
         // }
         //Cache::forget('nexar_token');
-
-        if (Cache::has('nexar_token')) {
-            $tokenData = Cache::get('nexar_token');
+        //info(' getToken $this->organizationId   ---> ' . $this->organizationId);
+        if (Cache::has('nexar_token_' . $this->organizationId)) {
+            //info('__inside if      ' . $this->organizationId);
+            $tokenData = Cache::get('nexar_token_' . $this->organizationId);
             $ttl = now()->diffInSeconds($tokenData['expires_at'], false); // Calculate time left in seconds
             // dd([
             //     'token' => $tokenData['token'],
@@ -38,8 +42,8 @@ class NexarGraphQLService
         $response = $this->client->post(config('nexar.identity_endpoint'), [
             'form_params' => [
                 'grant_type' => 'client_credentials',
-                'client_id' => config('nexar.client_id'),
-                'client_secret' => config('nexar.client_secret'),
+                'client_id' => config('nexar.client_id_' . $this->organizationId),
+                'client_secret' => config('nexar.client_secret_' . $this->organizationId),
                 'scope' => 'supply.domain'
             ]
         ]);
@@ -48,25 +52,26 @@ class NexarGraphQLService
         $token = $data['access_token'];
         $expiresIn = $data['expires_in'];
         $expiresAt = now()->addSeconds($expiresIn);
-            // Store the token with expiration time
-           $nexar_token = NexarToken::create([
-                'client_id' => config('nexar.client_id'),
-                'client_secret' => config('nexar.client_secret'),
-                'supply_token' => $token,
-                'expires_at' => $expiresAt,
-                'expires_in' => $expiresIn,
-                'scope' =>'supply.domain',
-            ]);
+        // Store the token with expiration time
+        $nexar_token = NexarToken::create([
+            'client_id' => config('nexar.client_id_' . $this->organizationId),
+            'client_secret' => config('nexar.client_secret_' . $this->organizationId),
+            'organization_id' => $this->organizationId,
+            'supply_token' => $token,
+            'expires_at' => $expiresAt,
+            'expires_in' => $expiresIn,
+            'scope' => 'supply.domain',
+        ]);
 
-            
-            Cache::put('nexar_token', [
-                'token' => $token,
-                'expires_at' => $expiresAt,
-                'id' => $nexar_token->id
-            ], $expiresIn);
 
-            //dd(Cache::get('nexar_token')); // View cached data
-       
+        Cache::put('nexar_token_' . $this->organizationId, [
+            'token' => $token,
+            'expires_at' => $expiresAt,
+            'id' => $nexar_token->id
+        ], $expiresIn);
+
+        //dd(Cache::get('nexar_token')); // View cached data
+
 
         return $token;
     }
@@ -85,7 +90,7 @@ class NexarGraphQLService
             ],
             'json' => [
                 'query' => $query,
-                'variables' => (object) $variables  // Ensure variables are an object
+                'variables' => (object)$variables  // Ensure variables are an object
             ]
         ]);
 
@@ -462,7 +467,7 @@ query FilterByManufacturer (\$searchTerm: String!, \$limit: Int, \$filters: Map)
     }
 }
 GQL;
-        $variables = ['searchTerm' => $searchTerm, 'limit' => $limit, 'filters' => (object) $filters];
+        $variables = ['searchTerm' => $searchTerm, 'limit' => $limit, 'filters' => (object)$filters];
         return $this->query($query, $variables);
     }
 
@@ -491,7 +496,7 @@ query FilterByDistributor (\$searchTerm: String!, \$limit: Int, \$filters: Map) 
     }
 }
 GQL;
-        $variables = ['searchTerm' => $searchTerm, 'limit' => $limit, 'filters' => (object) $filters];
+        $variables = ['searchTerm' => $searchTerm, 'limit' => $limit, 'filters' => (object)$filters];
         return $this->query($query, $variables);
     }
 
@@ -519,7 +524,7 @@ query FilterByPartCategory (\$searchTerm: String!, \$limit: Int, \$filters: Map)
     }
 }
 GQL;
-        $variables = ['searchTerm' => $searchTerm, 'limit' => $limit, 'filters' => (object) $filters];
+        $variables = ['searchTerm' => $searchTerm, 'limit' => $limit, 'filters' => (object)$filters];
         return $this->query($query, $variables);
     }
 
@@ -546,7 +551,7 @@ query FilterByTechSpec (\$searchTerm: String!, \$limit: Int, \$filters: Map) {
     }
 }
 GQL;
-        $variables = ['searchTerm' => $searchTerm, 'limit' => $limit, 'filters' => (object) $filters];
+        $variables = ['searchTerm' => $searchTerm, 'limit' => $limit, 'filters' => (object)$filters];
         return $this->query($query, $variables);
     }
 
@@ -848,7 +853,7 @@ GQL;
             'searchTerm' => $searchTerm,
             'country' => $country,
             'currency' => $currency,
-            'filters' => (object) $filters,
+            'filters' => (object)$filters,
             'inStockOnly' => $inStockOnly,
             'limit' => $limit,
             'start' => $start
@@ -930,7 +935,7 @@ GQL;
             'country' => $country,
             'currency' => $currency,
             'requireStockAvailable' => $requireStockAvailable,
-            'filters' => (object) $filters,
+            'filters' => (object)$filters,
             'queries' => $queries
         ];
         return $this->query($query, $variables);
@@ -996,7 +1001,7 @@ GQL;
         $variables = [
             'mpn' => $mpn,
             'limit' => $limit,
-            'filters' => (object) $filters
+            'filters' => (object)$filters
         ];
         return $this->query($query, $variables);
     }
