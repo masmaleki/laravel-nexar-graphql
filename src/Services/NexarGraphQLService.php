@@ -808,15 +808,20 @@ query MPNSearch (\$searchTerm: String!, \$country: String!, \$currency: String!,
                     url
                 }
                 manufacturerUrl
-                cad {
-                    has3dModel
-                }
                 specs {
                     attribute {
-                        id
                         name
+                        id
                         shortname
+                        unitsName
+                        valueType
+                        group
                     }
+                    value
+                    siValue
+                    units
+                    unitsName
+                    unitsSymbol
                     displayValue
                 }
                 sellers {
@@ -860,6 +865,7 @@ GQL;
         ];
         return $this->query($query, $variables);
     }
+
 
     public function multiMPNSearch($country, $currency, $requireStockAvailable, $filters, $queries)
     {
