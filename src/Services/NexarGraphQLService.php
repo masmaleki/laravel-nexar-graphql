@@ -785,12 +785,61 @@ query MPNSearch (\$searchTerm: String!, \$country: String!, \$currency: String!,
         }
         results {
             part {
+                freeSampleUrl
+                category {
+                    id
+                    parentId
+                    name
+                    ancestors {
+                        id
+                        parentId
+                        name
+                        numParts
+                        blurb {
+                            name
+                            description
+                            content
+                            metaTitle
+                            pathName
+                            metaDescription
+                        }
+                        path
+                    }
+                    children {
+                        id
+                        parentId
+                        name
+                        numParts
+                        blurb {
+                            name
+                            description
+                            content
+                            metaTitle
+                            pathName
+                            metaDescription
+                        }
+                        path
+                    }
+                    numParts
+                    blurb {
+                        name
+                        description
+                        content
+                        metaTitle
+                        pathName
+                        metaDescription
+                    }
+                    path
+                }
+                akaMpns
                 id
                 name
                 mpn
                 shortDescription
                 manufacturer {
+                    aliases
                     name
+                    id
                     displayFlag
                 }
                 medianPrice1000 {
@@ -824,10 +873,14 @@ query MPNSearch (\$searchTerm: String!, \$country: String!, \$currency: String!,
                     unitsSymbol
                     displayValue
                 }
-                sellers {
+                sellers (
+                    authorizedOnly:true
+                    includeBrokers:false
+                    ){
                     company {
                         id
                         name
+                        isVerified
                         homepageUrl
                     }
                     isAuthorized
