@@ -856,6 +856,12 @@ query MPNSearch (\$searchTerm: String!, \$country: String!, \$currency: String!,
                     creditUrl
                     url
                 }
+                bestImage{
+                    url
+                  }
+                images{
+                    url
+                  }
                 manufacturerUrl
                 specs {
                     attribute {
