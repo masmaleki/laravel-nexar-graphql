@@ -924,6 +924,222 @@ GQL;
         ];
         return $this->query($query, $variables);
     }
+    //general serach by mpn or specs or name or description
+    public function genralSearch($searchTerm, $country, $currency, $filters, $inStockOnly, $limit, $start)
+    {
+        $query = <<<GQL
+        query supSearch (\$searchTerm: String!, \$country: String!, \$currency: String!, \$filters: Map, \$inStockOnly: Boolean, \$limit: Int, \$start: Int) {
+            supSearchMpn (q: \$searchTerm, country: \$country, currency: \$currency, filters: \$filters, inStockOnly: \$inStockOnly, limit: \$limit, start: \$start) {
+                hits
+                categoryAgg {
+                    category {
+                        id
+                        name
+                    }
+                    count
+                }
+                manufacturerAgg {
+                    company {
+                        id
+                        name
+                    }
+                    count
+                }
+                distributorAgg {
+                    company {
+                        id
+                        name
+                        displayFlag
+                    }
+                    count
+                }
+                results {
+                    akaMpn
+                    description
+                    part {
+                        similarParts {
+                            #For this query, we have chosen to return the similar part names, the octopartURL & MPN 
+                            #Press CTRL+space to find out what else you can return
+                            id
+                            name
+                            mpn        
+                            medianPrice1000 {
+                            quantity
+                            currency
+                            }
+                            category {
+                            id
+                            name          
+                            }
+                            manufacturer {
+                            name
+                            homepageUrl
+                            }
+                            genericMpn
+                            shortDescription
+                            estimatedFactoryLeadDays
+                            sellers{
+                            company{
+                                aliases
+                            }
+                            offers{
+                                sku
+                                eligibleRegion
+                                inventoryLevel
+                                packaging
+                                moq
+                                prices{
+                                quantity
+                                price
+                                currency
+                                convertedPrice
+                                convertedCurrency
+                                conversionRate
+                                }
+                                isCustomPricing
+
+                            }
+                            }
+                        }
+                        freeSampleUrl
+                        category {
+                            id
+                            parentId
+                            name
+                            ancestors {
+                                id
+                                parentId
+                                name
+                                numParts
+                                blurb {
+                                    name
+                                    description
+                                    content
+                                    metaTitle
+                                    pathName
+                                    metaDescription
+                                }
+                                path
+                            }
+                            children {
+                                id
+                                parentId
+                                name
+                                numParts
+                                blurb {
+                                    name
+                                    description
+                                    content
+                                    metaTitle
+                                    pathName
+                                    metaDescription
+                                }
+                                path
+                            }
+                            numParts
+                            blurb {
+                                name
+                                description
+                                content
+                                metaTitle
+                                pathName
+                                metaDescription
+                            }
+                            path
+                        }
+                        akaMpns
+                        id
+                        name
+                        mpn
+                        shortDescription
+                        manufacturer {
+                            aliases
+                            name
+                            id
+                            displayFlag
+                        }
+                        medianPrice1000 {
+                            quantity
+                            currency
+                            price
+                            conversionRate
+                            convertedCurrency
+                            convertedPrice
+                        }
+                        bestDatasheet {
+                            name
+                            creditString
+                            creditUrl
+                            url
+                        }
+                        bestImage{
+                            url
+                        }
+                        images{
+                            url
+                        }
+                        manufacturerUrl
+                        specs {
+                            attribute {
+                                name
+                                id
+                                shortname
+                                unitsName
+                                valueType
+                                group
+                            }
+                            value
+                            siValue
+                            units
+                            unitsName
+                            unitsSymbol
+                            displayValue
+                        }
+                        sellers (
+                            authorizedOnly:true
+                            includeBrokers:false
+                            ){
+                            company {
+                                id
+                                name
+                                isVerified
+                                homepageUrl
+                            }
+                            isAuthorized
+                            offers {
+                                id
+                                sku
+                                inventoryLevel
+                                clickUrl
+                                moq
+                                packaging
+                                updated
+                                prices {
+                                    quantity
+                                    currency
+                                    price
+                                    conversionRate
+                                    convertedCurrency
+                                    convertedPrice
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        GQL;
+        $variables = [
+            'searchTerm' => $searchTerm,
+            'country' => $country,
+            'currency' => $currency,
+            'filters' => (object)$filters,
+            'inStockOnly' => $inStockOnly,
+            'limit' => $limit,
+            'start' => $start
+        ];
+        return $this->query($query, $variables);
+    }
 
 
     public function multiMPNSearch($country, $currency, $requireStockAvailable, $filters, $queries)
