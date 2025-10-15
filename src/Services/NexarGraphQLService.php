@@ -1197,6 +1197,7 @@ GQL;
                                 moq
                                 packaging
                                 updated
+                                factoryLeadDays
                                 prices {
                                     quantity
                                     currency
