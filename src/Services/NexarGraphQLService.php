@@ -11,42 +11,53 @@ class NexarGraphQLService
     protected $client;
     protected $token;
     protected $organizationId;
+    protected $client_id;
+    protected $client_secret;
+    protected $identity_endpoint;
+    protected $nexar_endpoint;
 
-    public function __construct()
+    public function __construct(
+        ?string $client_id,
+        ?string $client_secret,
+        ?string $identity_endpoint,
+        ?string $nexar_endpoint,
+        int|string|null $organizationId
+    )
     {
-        $this->organizationId = config('nexar.current_internal_organization_id');;
-        //info('__construct      ' . $this->organizationId);
+        /**
+         * Fetch data from params passed to constructor, if nothing passed fallback to config *Backward compability*
+         */
+        $this->organizationId = $organizationId ?? config('nexar.current_internal_organization_id', null);
+        $this->client_id = $client_id ?? config('nexar.client_id_' . $organizationId);
+        $this->client_secret = $client_secret ??  config('nexar.client_secret_' . $organizationId);
+        $this->identity_endpoint = $identity_endpoint ?? config('nexar.identity_endpoint');
+        $this->nexar_endpoint = $nexar_endpoint ?? config('nexar.endpoint');
+
         $this->client = new Client();
-        $this->token = $this->getToken();
+        // $this->token = $this->getToken();
     }
 
     protected function getToken()
     {
-        // $token = NexarToken::first();
-        // if ($token) {
-        //     return $token->token;
-        // }
-        //Cache::forget('nexar_token');
-        //info(' getToken $this->organizationId   ---> ' . $this->organizationId);
-        if (Cache::has('nexar_token_' . $this->organizationId)) {
-            //info('__inside if      ' . $this->organizationId);
-            $tokenData = Cache::get('nexar_token_' . $this->organizationId);
+        $cacheKey = 'nexar_token_' . $this->client_id . '_' . $this->organizationId;
+
+        if (Cache::has($cacheKey)) {
+            $tokenData = Cache::get($cacheKey);
             $ttl = now()->diffInSeconds($tokenData['expires_at'], false); // Calculate time left in seconds
-            // dd([
-            //     'token' => $tokenData['token'],
-            //     'ttl' => $ttl > 0 ? $ttl : 'Expired',
-            // ]);
             return $tokenData['token'];
         }
-        //dd("nocache");
-        $response = $this->client->post(config('nexar.identity_endpoint'), [
-            'form_params' => [
-                'grant_type' => 'client_credentials',
-                'client_id' => config('nexar.client_id_' . $this->organizationId),
-                'client_secret' => config('nexar.client_secret_' . $this->organizationId),
-                'scope' => 'supply.domain'
+
+        $response = $this->client->post(
+            $this->identity_endpoint, 
+            [
+                'form_params' => [
+                    'grant_type' => 'client_credentials',
+                    'client_id' => $this->client_id,
+                    'client_secret' =>$this->client_secret,
+                    'scope' => 'supply.domain'
+                ]
             ]
-        ]);
+        );
 
         $data = json_decode($response->getBody()->getContents(), true);
         $token = $data['access_token'];
@@ -54,8 +65,8 @@ class NexarGraphQLService
         $expiresAt = now()->addSeconds($expiresIn);
         // Store the token with expiration time
         $nexar_token = NexarToken::create([
-            'client_id' => config('nexar.client_id_' . $this->organizationId),
-            'client_secret' => config('nexar.client_secret_' . $this->organizationId),
+            'client_id' => $this->client_id,
+            'client_secret' => $this->client_secret,
             'organization_id' => $this->organizationId,
             'supply_token' => $token,
             'expires_at' => $expiresAt,
@@ -83,18 +94,22 @@ class NexarGraphQLService
 
     protected function query($query, $variables = [])
     {
-        $response = $this->client->post(config('nexar.endpoint'), [
-            'headers' => [
-                'Authorization' => 'Bearer ' . $this->token,
-                'Content-Type' => 'application/json'
-            ],
-            'json' => [
-                'query' => $query,
-                'variables' => (object)$variables  // Ensure variables are an object
+        $response = $this->client->post(
+            $this->nexar_endpoint, 
+            [
+                'headers' => [
+                        'Authorization' => 'Bearer ' . $this->getToken(),
+                        'Content-Type' => 'application/json'
+                ],
+                'json' => [
+                        'query' => $query,
+                        'variables' => (object)$variables  // Ensure variables are an object
+                ]
             ]
-        ]);
+        );
 
         $body = $response->getBody()->getContents();
+
         return json_decode($body, true);
     }
 

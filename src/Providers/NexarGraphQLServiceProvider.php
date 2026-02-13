@@ -11,7 +11,7 @@ class NexarGraphQLServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__ . '/../Config/nexar.php', 'nexar');
 
-        $this->app->singleton('NexarGraphQL', function ($app) {
+        $this->app->bind('NexarGraphQL', function ($app) {
             return new \NexarGraphQL\Services\NexarGraphQLService();
         });
 
