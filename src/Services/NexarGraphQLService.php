@@ -17,24 +17,30 @@ class NexarGraphQLService
     protected $nexar_endpoint;
 
     public function __construct(
-        ?string $client_id,
-        ?string $client_secret,
-        ?string $identity_endpoint,
-        ?string $nexar_endpoint,
-        int|string|null $organizationId
-    )
-    {
-        /**
-         * Fetch data from params passed to constructor, if nothing passed fallback to config *Backward compability*
-         */
-        $this->organizationId = $organizationId ?? config('nexar.current_internal_organization_id', null);
-        $this->client_id = $client_id ?? config('nexar.client_id_' . $organizationId);
-        $this->client_secret = $client_secret ??  config('nexar.client_secret_' . $organizationId);
-        $this->identity_endpoint = $identity_endpoint ?? config('nexar.identity_endpoint');
-        $this->nexar_endpoint = $nexar_endpoint ?? config('nexar.endpoint');
+        ?string $client_id = null,
+        ?string $client_secret = null,
+        ?string $identity_endpoint = null,
+        ?string $nexar_endpoint = null,
+        int|string|null $organizationId = null
+    ) {
+        // First resolve organizationId
+        $this->organizationId = $organizationId
+            ?? config('nexar.current_internal_organization_id', null);
+
+        // Then use the resolved org ID
+        $this->client_id = $client_id
+            ?? config('nexar.client_id_' . $this->organizationId);
+
+        $this->client_secret = $client_secret
+            ?? config('nexar.client_secret_' . $this->organizationId);
+
+        $this->identity_endpoint = $identity_endpoint
+            ?? config('nexar.identity_endpoint');
+
+        $this->nexar_endpoint = $nexar_endpoint
+            ?? config('nexar.endpoint');
 
         $this->client = new Client();
-        // $this->token = $this->getToken();
     }
 
     protected function getToken()
