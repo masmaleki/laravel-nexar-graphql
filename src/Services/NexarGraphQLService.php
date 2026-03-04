@@ -81,7 +81,7 @@ class NexarGraphQLService
         ]);
 
 
-        Cache::put('nexar_token_' . $this->organizationId, [
+        Cache::put('nexar_token_' . $this->client_id . '_' . $this->organizationId, [
             'token' => $token,
             'expires_at' => $expiresAt,
             'id' => $nexar_token->id
