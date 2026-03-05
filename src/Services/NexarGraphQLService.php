@@ -50,11 +50,13 @@ class NexarGraphQLService
         if (Cache::has($cacheKey)) {
             $tokenData = Cache::get($cacheKey);
             $ttl = now()->diffInSeconds($tokenData['expires_at'], false); // Calculate time left in seconds
-            return $tokenData['token'];
+            if ($ttl > 0) {
+                return $tokenData['token'];
+            }
         }
 
         $response = $this->client->post(
-            $this->identity_endpoint, 
+            $this->identity_endpoint,
             [
                 'form_params' => [
                     'grant_type' => 'client_credentials',
@@ -95,13 +97,13 @@ class NexarGraphQLService
 
     public function getSupplyToken()
     {
-        return $this->token;
+        return $this->getToken();
     }
 
     protected function query($query, $variables = [])
     {
         $response = $this->client->post(
-            $this->nexar_endpoint, 
+            $this->nexar_endpoint,
             [
                 'headers' => [
                         'Authorization' => 'Bearer ' . $this->getToken(),

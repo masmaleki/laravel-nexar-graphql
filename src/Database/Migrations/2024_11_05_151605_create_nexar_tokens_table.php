@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('client_id');
             $table->string('client_secret');
+            $table->unsignedBigInteger('organization_id')->nullable();
             $table->string('supply_token');
             $table->string('scope');
             $table->date('expires_at');
