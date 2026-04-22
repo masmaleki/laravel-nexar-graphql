@@ -18,7 +18,7 @@ return new class extends Migration
             $table->unsignedBigInteger('organization_id')->nullable();
             $table->string('supply_token');
             $table->string('scope');
-            $table->date('expires_at');
+            $table->dateTime('expires_at');
             $table->integer('expires_in');
             $table->timestamps();
         });
