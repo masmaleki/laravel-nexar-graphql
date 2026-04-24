@@ -2,19 +2,35 @@
 
 namespace NexarGraphQL\Services;
 
+use Carbon\CarbonInterface;
 use GuzzleHttp\Client;
+use GuzzleHttp\Exception\BadResponseException;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\Exception\RequestException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use NexarGraphQL\App\Models\NexarToken;
+use RuntimeException;
+use Throwable;
 
 class NexarGraphQLService
 {
-    protected $client;
-    protected $token;
-    protected $organizationId;
-    protected $client_id;
-    protected $client_secret;
-    protected $identity_endpoint;
-    protected $nexar_endpoint;
+    protected Client $client;
+
+    /** Cached supply token in memory for the lifetime of this instance. */
+    protected ?string $token = null;
+
+    protected int|string|null $organizationId;
+    protected ?string $client_id;
+    protected ?string $client_secret;
+    protected ?string $identity_endpoint;
+    protected ?string $nexar_endpoint;
+
+    /** Default Guzzle timeouts; keep tight so a Nexar outage cannot hang requests. */
+    protected float $connectTimeoutSeconds = 5.0;
+    protected float $requestTimeoutSeconds = 15.0;
 
     public function __construct(
         ?string $client_id = null,
@@ -23,16 +39,16 @@ class NexarGraphQLService
         ?string $nexar_endpoint = null,
         int|string|null $organizationId = null
     ) {
-        // First resolve organizationId
         $this->organizationId = $organizationId
             ?? config('nexar.current_internal_organization_id', null);
 
-        // Then use the resolved org ID
         $this->client_id = $client_id
-            ?? config('nexar.client_id_' . $this->organizationId);
+            ?? config('nexar.client_id_' . $this->organizationId)
+            ?? config('nexar.client_id');
 
         $this->client_secret = $client_secret
-            ?? config('nexar.client_secret_' . $this->organizationId);
+            ?? config('nexar.client_secret_' . $this->organizationId)
+            ?? config('nexar.client_secret');
 
         $this->identity_endpoint = $identity_endpoint
             ?? config('nexar.identity_endpoint');
@@ -40,85 +56,259 @@ class NexarGraphQLService
         $this->nexar_endpoint = $nexar_endpoint
             ?? config('nexar.endpoint');
 
-        $this->client = new Client();
+        $this->client = new Client([
+            'connect_timeout' => $this->connectTimeoutSeconds,
+            'timeout' => $this->requestTimeoutSeconds,
+            'http_errors' => true,
+        ]);
     }
 
-    protected function getToken()
+    /**
+     * Fetch (or reuse) a Nexar supply token.
+     *
+     * Returns null if credentials are not configured or the identity
+     * endpoint refused the request — callers MUST handle the null path
+     * rather than crashing on missing tokens.
+     */
+    protected function getToken(): ?string
     {
-        $cacheKey = 'nexar_token_' . $this->client_id . '_' . $this->organizationId;
+        if ($this->token !== null) {
+            return $this->token;
+        }
+
+        if (! $this->hasCredentials()) {
+            Log::warning('Nexar credentials missing for organization', [
+                'organization_id' => $this->organizationId,
+                'has_identity_endpoint' => (bool) $this->identity_endpoint,
+            ]);
+
+            return null;
+        }
+
+        $cacheKey = $this->cacheKey();
 
         if (Cache::has($cacheKey)) {
             $tokenData = Cache::get($cacheKey);
-            $ttl = now()->diffInSeconds($tokenData['expires_at'], false); // Calculate time left in seconds
-            if ($ttl > 0) {
-                return $tokenData['token'];
+            if (is_array($tokenData) && isset($tokenData['token'], $tokenData['expires_at'])) {
+                $expiresAt = $this->normalizeExpiresAt($tokenData['expires_at']);
+                if ($expiresAt && $expiresAt->isFuture()) {
+                    return $this->token = (string) $tokenData['token'];
+                }
             }
         }
 
-        $response = $this->client->post(
-            $this->identity_endpoint,
-            [
-                'form_params' => [
-                    'grant_type' => 'client_credentials',
-                    'client_id' => $this->client_id,
-                    'client_secret' =>$this->client_secret,
-                    'scope' => 'supply.domain'
+        try {
+            $response = $this->client->post(
+                $this->identity_endpoint,
+                [
+                    'form_params' => [
+                        'grant_type' => 'client_credentials',
+                        'client_id' => $this->client_id,
+                        'client_secret' => $this->client_secret,
+                        'scope' => 'supply.domain',
+                    ],
                 ]
-            ]
-        );
+            );
+        } catch (BadResponseException $e) {
+            $status = $e->getResponse()?->getStatusCode();
+            $body = (string) ($e->getResponse()?->getBody() ?? '');
 
-        $data = json_decode($response->getBody()->getContents(), true);
-        $token = $data['access_token'];
-        $expiresIn = $data['expires_in'];
-        $expiresAt = now()->addSeconds($expiresIn);
-        // Store the token with expiration time
-        $nexar_token = NexarToken::create([
-            'client_id' => $this->client_id,
-            'client_secret' => $this->client_secret,
-            'organization_id' => $this->organizationId,
-            'supply_token' => $token,
-            'expires_at' => $expiresAt,
-            'expires_in' => $expiresIn,
-            'scope' => 'supply.domain',
-        ]);
+            Log::error('Nexar identity endpoint rejected the credentials', [
+                'organization_id' => $this->organizationId,
+                'status' => $status,
+                'body' => mb_substr($body, 0, 500),
+            ]);
 
+            return null;
+        } catch (ConnectException|RequestException $e) {
+            Log::warning('Nexar identity endpoint unreachable', [
+                'organization_id' => $this->organizationId,
+                'message' => $e->getMessage(),
+            ]);
 
-        Cache::put('nexar_token_' . $this->client_id . '_' . $this->organizationId, [
+            return null;
+        } catch (GuzzleException|Throwable $e) {
+            Log::error('Unexpected error while requesting Nexar supply token', [
+                'organization_id' => $this->organizationId,
+                'message' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        $body = (string) $response->getBody();
+        $data = json_decode($body, true);
+
+        if (! is_array($data) || empty($data['access_token'])) {
+            Log::error('Nexar identity endpoint returned a token-less payload', [
+                'organization_id' => $this->organizationId,
+                'body_excerpt' => mb_substr($body, 0, 200),
+            ]);
+
+            return null;
+        }
+
+        $token = (string) $data['access_token'];
+        $expiresIn = (int) ($data['expires_in'] ?? 3600);
+        if ($expiresIn <= 0) {
+            $expiresIn = 3600;
+        }
+
+        $expiresAt = Carbon::now()->addSeconds($expiresIn);
+        $scope = (string) ($data['scope'] ?? 'supply.domain');
+
+        $this->persistToken($token, $expiresAt, $expiresIn, $scope);
+
+        // Cache for slightly less than the actual TTL so we re-issue
+        // before downstream Nexar calls start seeing 401s.
+        $cacheTtl = max(60, $expiresIn - 60);
+
+        Cache::put($cacheKey, [
             'token' => $token,
             'expires_at' => $expiresAt,
-            'id' => $nexar_token->id
-        ], $expiresIn);
+        ], $cacheTtl);
 
-        //dd(Cache::get('nexar_token')); // View cached data
-
-
-        return $token;
+        return $this->token = $token;
     }
 
-    public function getSupplyToken()
+    /**
+     * Public accessor — returns the current supply token, or null on failure.
+     */
+    public function getSupplyToken(): ?string
     {
         return $this->getToken();
     }
 
-    protected function query($query, $variables = [])
+    /**
+     * Force-refresh the supply token (useful when downstream sees 401).
+     */
+    public function refreshSupplyToken(): ?string
     {
-        $response = $this->client->post(
-            $this->nexar_endpoint,
-            [
-                'headers' => [
-                        'Authorization' => 'Bearer ' . $this->getToken(),
-                        'Content-Type' => 'application/json'
-                ],
-                'json' => [
+        $this->token = null;
+        Cache::forget($this->cacheKey());
+
+        return $this->getToken();
+    }
+
+    protected function persistToken(string $token, CarbonInterface $expiresAt, int $expiresIn, string $scope): void
+    {
+        // The DB row is purely an audit trail. If the migration hasn't
+        // been run yet (fresh install / partial deploy), don't take the
+        // whole request down — log and continue using the cached token.
+        try {
+            NexarToken::create([
+                'client_id' => $this->client_id,
+                'client_secret' => $this->client_secret,
+                'organization_id' => $this->organizationId,
+                'supply_token' => $token,
+                'expires_at' => $expiresAt,
+                'expires_in' => $expiresIn,
+                'scope' => $scope,
+            ]);
+        } catch (Throwable $e) {
+            Log::warning('Could not persist nexar_tokens audit row (continuing with in-memory token)', [
+                'organization_id' => $this->organizationId,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    protected function hasCredentials(): bool
+    {
+        return is_string($this->client_id) && $this->client_id !== ''
+            && is_string($this->client_secret) && $this->client_secret !== ''
+            && is_string($this->identity_endpoint) && $this->identity_endpoint !== ''
+            && is_string($this->nexar_endpoint) && $this->nexar_endpoint !== '';
+    }
+
+    protected function cacheKey(): string
+    {
+        return 'nexar_token_' . ($this->client_id ?? 'noid') . '_' . ($this->organizationId ?? 'noorg');
+    }
+
+    /**
+     * Cache drivers may serialize Carbon instances or store stringified
+     * dates. Normalize either form to a Carbon instance so the future-check
+     * is reliable across drivers (file/redis/memcached/array).
+     */
+    protected function normalizeExpiresAt(mixed $value): ?CarbonInterface
+    {
+        if ($value instanceof CarbonInterface) {
+            return $value;
+        }
+
+        if (is_string($value) || is_numeric($value)) {
+            try {
+                return Carbon::parse($value);
+            } catch (Throwable) {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $variables
+     * @return array<mixed>
+     *
+     * @throws RuntimeException when no supply token can be obtained.
+     */
+    protected function query(string $query, array $variables = []): array
+    {
+        $token = $this->getToken();
+        if ($token === null) {
+            throw new RuntimeException(
+                'Nexar supply token unavailable for organization ' . ($this->organizationId ?? 'n/a')
+            );
+        }
+
+        try {
+            $response = $this->client->post(
+                $this->nexar_endpoint,
+                [
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $token,
+                        'Content-Type' => 'application/json',
+                    ],
+                    'json' => [
                         'query' => $query,
-                        'variables' => (object)$variables  // Ensure variables are an object
+                        'variables' => (object) $variables,
+                    ],
                 ]
-            ]
-        );
+            );
+        } catch (BadResponseException $e) {
+            // 401 most commonly means the cached token expired between
+            // our TTL check and Nexar's enforcement window. Refresh once
+            // and retry transparently.
+            if ($e->getResponse()?->getStatusCode() === 401) {
+                $token = $this->refreshSupplyToken();
+                if ($token !== null) {
+                    $response = $this->client->post(
+                        $this->nexar_endpoint,
+                        [
+                            'headers' => [
+                                'Authorization' => 'Bearer ' . $token,
+                                'Content-Type' => 'application/json',
+                            ],
+                            'json' => [
+                                'query' => $query,
+                                'variables' => (object) $variables,
+                            ],
+                        ]
+                    );
+                } else {
+                    throw $e;
+                }
+            } else {
+                throw $e;
+            }
+        }
 
-        $body = $response->getBody()->getContents();
+        $body = (string) $response->getBody();
+        $decoded = json_decode($body, true);
 
-        return json_decode($body, true);
+        return is_array($decoded) ? $decoded : [];
     }
 
     public function listAttributes()
@@ -644,12 +834,9 @@ query PartSpecs (\$searchTerm: String!, \$limit: Int) {
                 }
                 specs {
                     attribute {
-                        #For this query, we have chosen to return the part specification name, id & shortname
-                        #Press CTRL+space to find out what else you can return
                         name
                         id
                         shortname
-                        
                         unitsName
                         valueType
                         group
@@ -659,7 +846,6 @@ query PartSpecs (\$searchTerm: String!, \$limit: Int) {
                     units
                     unitsName
                     unitsSymbol
-                    
                     displayValue
                 }
             }
